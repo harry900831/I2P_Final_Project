@@ -1,0 +1,1 @@
+gcc -o game -Wall main.c -I/usr/local/include -L/usr/local/lib -lallegro_image -lallegro_ttf -lallegro_font -lallegro_dialog -lallegro_primitives -lallegro_acodec -lallegro_audio -lallegro -lallegro_main
