@@ -91,7 +91,7 @@ typedef struct {
 	float vx, vy;
 	// Should we draw this object on the screen.
 	bool hidden;
-	// The pointer to the object’s image.
+	// The pointer to the object? image.
 	ALLEGRO_BITMAP* img;
 } MovableObject;
 void draw_movable_object(MovableObject obj);
@@ -293,9 +293,9 @@ void game_init(void) {
 	// 2) Load it in by 'al_load_bitmap' or 'load_bitmap_resized'.
 	// 3) If you use 'al_load_bitmap', don't forget to check its return value.
 	// Uncomment and fill in the code below.
-	//img_bullet = ???("image12.png");
-	//if (!img_bullet)
-	//	game_abort("failed to load image: image12.png");
+	img_bullet = al_load_bitmap("image12.png");
+	if (!img_bullet)
+		game_abort("failed to load image: image12.png");
 
 	// Change to first scene.
 	game_change_scene(SCENE_MENU);
@@ -509,6 +509,7 @@ void game_change_scene(int next_scene) {
 		al_stop_sample(&start_bgm_id);
 		game_log("stop audio (bgm)");
 	}
+
 	active_scene = next_scene;
 	// TODO: Allocate resources before entering scene.
 	if (active_scene == SCENE_MENU) {
@@ -528,6 +529,7 @@ void game_change_scene(int next_scene) {
 			enemies[i].x = enemies[i].w / 2 + (float)rand() / RAND_MAX * (SCREEN_W - enemies[i].w);
 			enemies[i].y = 80;
 		}
+
 		// #[HACKATHON 2-6]
 		// TODO: Initialize bullets.
 		// For each bullets in array, set their w and h to the size of
@@ -535,8 +537,8 @@ void game_change_scene(int next_scene) {
 		// (vx, vy) to (0, -3).
 		// Uncomment and fill in the code below.
 		for (i = 0; i < MAX_BULLET; i++) {
-			bullets[i].w = al_get_bitmap_width(bullets[i].img);
-			bullets[i].h = al_get_bitmap_height(bullets[i].img);
+			bullets[i].w = al_get_bitmap_width(img_bullet);
+			bullets[i].h = al_get_bitmap_height(img_bullet);
 			bullets[i].img = img_bullet;
 			bullets[i].vx = 0;
 			bullets[i].vy = -3;
