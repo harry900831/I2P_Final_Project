@@ -3,7 +3,7 @@
 
 #define _CRT_SECURE_NO_DEPRECATE
 #include <stdio.h>
-#include <allegro5/allegro.h>:
+#include <allegro5/allegro.h>
 #include <allegro5/allegro_primitives.h>
 #include <allegro5/allegro_image.h>
 #include <allegro5/allegro_font.h>
@@ -88,7 +88,8 @@ ALLEGRO_SAMPLE_ID start_bgm_id;
 // #[HACKATHON 2-1]
 // TODO: Declare a variable to store your bullet's image.
 // Uncomment and fill in the code below.
-ALLEGRO_BITMAP* img_bullet;
+ALLEGRO_BITMAP* plane_img_bullet;
+ALLEGRO_BITMAP* enemy_img_bullet;
 
 typedef struct {
 	float x, y;
@@ -126,10 +127,11 @@ typedef struct{
 	ALLEGRO_BITMAP* img;
 } Plane;
 Plane plane;
+const int plane_init_hp = 5;
 void draw_plane(Plane obj);
 
 const float PLANE_SHOOT_COOLDOWN = 0.2f;
-const float ENEMY_SHOOT_COOLDOWN = 0.3f;
+const float ENEMY_SHOOT_COOLDOWN = 2.0f;
 double last_plane_shoot_timestamp;
 double last_enemy_shoot_timestamp[MAX_ENEMY];
 
@@ -260,7 +262,7 @@ void game_init(void) {
 		game_abort("failed to load font: pirulen.ttf with size 24");
 
 	/* Menu Scene resources*/
-	main_img_background = load_bitmap_resized("main-bg.jpg", SCREEN_W, SCREEN_H);
+	main_img_background = load_bitmap_resized("menu-bg.jpg", SCREEN_W, SCREEN_H);
 
 	main_bgm = al_load_sample("S31-Night Prowler.ogg");
 	if (!main_bgm)
@@ -278,23 +280,27 @@ void game_init(void) {
 		game_abort("failed to load image: settings2.png");
 
 	/* Start Scene resources*/
-	start_img_background = load_bitmap_resized("start-bg.jpg", SCREEN_W, SCREEN_H);
+	start_img_background = load_bitmap_resized("game-bg.jpg", SCREEN_W, SCREEN_H);
 
-	start_img_plane = al_load_bitmap("plane.png");
+	start_img_plane = load_bitmap_resized("plane.png", 60, 60);
 	if (!start_img_plane)
 		game_abort("failed to load image: plane.png");
 
-	start_img_enemy = al_load_bitmap("smallfighter0006.png");
+	start_img_enemy = load_bitmap_resized("enemy.png", 68, 36);
 	if (!start_img_enemy)
-		game_abort("failed to load image: smallfighter0006.png");
+		game_abort("failed to load image: enemy.png");
 
 	start_bgm = al_load_sample("mythica.ogg");
 	if (!start_bgm)
 		game_abort("failed to load audio: mythica.ogg");
 
-	img_bullet = al_load_bitmap("image12.png");
-	if (!img_bullet)
-		game_abort("failed to load image: image12.png");
+	plane_img_bullet = load_bitmap_resized("bullet.png", 15, 30);
+	if (!plane_img_bullet)
+		game_abort("failed to load image: bullet.png");
+
+	enemy_img_bullet = load_bitmap_resized("purple_bullet.png", 20, 32);
+	if (!enemy_img_bullet)
+		game_abort("failed to load image: purple_bullet.png");
 
 	// Change to first scene.
 	game_change_scene(SCENE_MENU);
@@ -445,7 +451,6 @@ void game_update(void) {
 			   			break;
 			    } 
 			    if (j < MAX_ENEMY_BULLET) {
-			    	game_log("shoot");
 			    	enemy_bullets[j].hidden = false;
 			    	enemy_bullets[j].x = enemies[i].x;
 			    	enemy_bullets[j].y = enemies[i].y + enemies[i].h / 2;
@@ -464,9 +469,9 @@ void game_draw(void) {
 		al_draw_text(font_pirulen_24, al_map_rgb(255, 255, 255), 20, SCREEN_H - 50, 0, "Press enter key to start");
 		
 		if (pnt_in_rect(mouse_x, mouse_y, SCREEN_W - 48, 10, 38, 38))
-			al_draw_bitmap(img_settings2, SCREEN_W - 48, 10, 0);
-		else
 			al_draw_bitmap(img_settings, SCREEN_W - 48, 10, 0);
+		else
+			al_draw_bitmap(img_settings2, SCREEN_W - 48, 10, 0);
 	} else if (active_scene == SCENE_START) {
 		int i;
 		al_draw_bitmap(start_img_background, 0, 0, 0);
@@ -478,6 +483,11 @@ void game_draw(void) {
 		for (i = 0; i < MAX_ENEMY_BULLET; i++)
 			draw_movable_object(enemy_bullets[i]);
 		al_draw_textf(font_pirulen_24, al_map_rgb(100, 50, 255), 10, SCREEN_H - 50, 0, "SCORE: %d", plane.score);
+		
+		al_draw_filled_rectangle(SCREEN_W/2 - 100, SCREEN_H - 40, SCREEN_W/2 + 100, SCREEN_H - 30, al_map_rgb(100, 100, 100));
+		al_draw_filled_rectangle(SCREEN_W/2 - 100, SCREEN_H - 40, SCREEN_W/2 - 100 + (200 * plane.hp / plane_init_hp), SCREEN_H - 30, al_map_rgb(255, 0, 0));
+		al_draw_rectangle(SCREEN_W/2 - 100, SCREEN_H - 40, SCREEN_W/2 + 100, SCREEN_H - 30, al_map_rgb(0, 0, 0), 2);
+
 	}
 	else if (active_scene == SCENE_SETTINGS) {
 		al_clear_to_color(al_map_rgb(0, 0, 0));
@@ -486,6 +496,7 @@ void game_draw(void) {
 		al_draw_text(font_pirulen_32, al_map_rgb(255, 255, 255), SCREEN_W / 2, SCREEN_H / 2 - 70, ALLEGRO_ALIGN_CENTER, "THE END");
 		al_draw_textf(font_pirulen_32, al_map_rgb(255, 255, 255), SCREEN_W / 2, SCREEN_H / 2 - 20, ALLEGRO_ALIGN_CENTER, "YOUR SCORE: %d", plane.score);
 		al_draw_text(font_pirulen_32, al_map_rgb(255, 255, 255), SCREEN_W / 2, SCREEN_H / 2 + 30, ALLEGRO_ALIGN_CENTER, "PRESS R TO THE MENU");
+		
 	}
 	al_flip_display();
 }
@@ -514,7 +525,8 @@ void game_destroy(void) {
 	// #[HACKATHON 2-10]
 	// TODO: Destroy your bullet image.
 	// Uncomment and fill in the code below.
-	al_destroy_bitmap(img_bullet);
+	al_destroy_bitmap(plane_img_bullet);
+	al_destroy_bitmap(enemy_img_bullet);
 
 	al_destroy_timer(game_update_timer);
 	al_destroy_event_queue(game_event_queue);
@@ -546,7 +558,7 @@ void game_change_scene(int next_scene) {
 		plane.w = al_get_bitmap_width(plane.img);
         plane.h = al_get_bitmap_height(plane.img);
         plane.score = 0;
-        plane.hp = 1;
+        plane.hp = plane_init_hp;
 		for (i = 0; i < MAX_ENEMY; i++) {
 			enemies[i].img = start_img_enemy;
 			enemies[i].w = al_get_bitmap_width(start_img_enemy);
@@ -555,20 +567,18 @@ void game_change_scene(int next_scene) {
 			enemies[i].y = 80;
 			enemies[i].hp = 3;
 		}
-
-		
 		for (i = 0; i < MAX_PLANE_BULLET; i++) {
-			plane_bullets[i].w = al_get_bitmap_width(img_bullet);
-			plane_bullets[i].h = al_get_bitmap_height(img_bullet);
-			plane_bullets[i].img = img_bullet;
+			plane_bullets[i].w = al_get_bitmap_width(plane_img_bullet);
+			plane_bullets[i].h = al_get_bitmap_height(plane_img_bullet);
+			plane_bullets[i].img = plane_img_bullet;
 			plane_bullets[i].vx = 0;
 			plane_bullets[i].vy = -3;
 			plane_bullets[i].hidden = true;
 		}
 		for (i = 0; i < MAX_ENEMY_BULLET; i++) {
-			enemy_bullets[i].w = al_get_bitmap_width(img_bullet);
-			enemy_bullets[i].h = al_get_bitmap_height(img_bullet);
-			enemy_bullets[i].img = img_bullet;
+			enemy_bullets[i].w = al_get_bitmap_width(enemy_img_bullet);
+			enemy_bullets[i].h = al_get_bitmap_height(enemy_img_bullet);
+			enemy_bullets[i].img = enemy_img_bullet;
 			enemy_bullets[i].vx = 0;
 			enemy_bullets[i].vy = 3;
 			enemy_bullets[i].hidden = true;
@@ -698,6 +708,5 @@ void game_vlog(const char* format, va_list arg) {
 	clear_file = false;
 #endif
 }
-
 
 
