@@ -15,7 +15,8 @@
 // If defined, logs will be shown on console and written to file.
 // If commented out, logs will not be shown nor be saved.
 #define LOG_ENABLED
-
+#define max(a, b) (a > b ? a : b)
+#define min(a, b) (a < b ? a : b)
 /* Constants. */
 
 // Frame rate (frame per second)
@@ -91,10 +92,19 @@ typedef struct {
 	float vx, vy;
 	// Should we draw this object on the screen.
 	bool hidden;
-	// The pointer to the object? image.
+	// The pointer to the object’s image.
 	ALLEGRO_BITMAP* img;
 } MovableObject;
 void draw_movable_object(MovableObject obj);
+typedef struct{
+	float x, y;
+	float w, h;
+	float vx, vy;
+	bool hidden;
+	int hp;
+	ALLEGRO_BITMAP* img;
+} Enemy;
+void draw_enemy(Enemy obj);
 #define MAX_ENEMY 3
 // #[HACKATHON 2-2]
 // TODO: Declare the max bullet count that will show on screen.
@@ -102,7 +112,7 @@ void draw_movable_object(MovableObject obj);
 // Uncomment and fill in the code below.
 #define MAX_BULLET 4
 MovableObject plane;
-MovableObject enemies[MAX_ENEMY];
+Enemy enemies[MAX_ENEMY];
 // #[HACKATHON 2-3]
 // TODO: Declare an array to store bullets with size of max bullet count.
 // Uncomment and fill in the code below.
@@ -143,10 +153,9 @@ ALLEGRO_BITMAP *load_bitmap_resized(const char *filename, int w, int h);
 // TODO: Declare a function.
 // Determines whether the point (px, py) is in rect (x, y, w, h).
 // Uncomment the code below.
-bool pnt_in_rect(int px, int py, int x, int y, int w, int h){
-	return px >= x && px <= x + w && py >= y && py <= y + h;
-}
-
+bool pnt_in_rect(int, int, int, int, int, int);
+bool object_overlap(float, float, float, float, float, float, float, float);
+	
 /* Event callbacks. */
 void on_key_down(int keycode);
 void on_mouse_down(int btn, int x, int y);
@@ -392,29 +401,28 @@ void game_update(void) {
 		// according to vx, vy.
 		// 2) If the bullet is out of the screen, hide it.
 		// Uncomment and fill in the code below.
-		int i;
+		int i, j;
 		for (i = 0; i < MAX_BULLET; i++) {
-			if (bullets[i].hidden)
-				continue;
+			if (bullets[i].hidden)continue;
 			bullets[i].x += bullets[i].vx;
 			bullets[i].y += bullets[i].vy;
-			if (bullets[i].y - bullets[i].h / 2 < 0)
+			if (bullets[i].y - bullets[i].h / 2 < 0){
 				bullets[i].hidden = true;
+				continue;
+			}
+			for(j = 0; j < MAX_ENEMY; j++){
+				if(enemies[j].hidden)continue;
+				if(object_overlap(bullets[i].x, bullets[i].y, bullets[i].w, bullets[i].h, enemies[j].x, enemies[j].y, enemies[j].w, enemies[j].h)){
+					enemies[j].hp--;
+					bullets[i].hidden = true;
+					if(enemies[j].hp == 0){
+						enemies[j].hidden = true;
+					}
+				}
+			}
+			
 		}
 
-		// #[HACKATHON 2-8]
-		// TODO: Shoot if key is down and cool-down is over.
-		// 1) Get the time now using 'al_get_time'.
-		// 2) If Space key is down in 'key_state' and the time
-		//    between now and last shoot is not less that cool
-		//    down time.
-		// 3) Loop through the bullet array and find one that is hidden.
-		//    (This part can be optimized.)
-		// 4) The bullet will be found if your array is large enough.
-		// 5) Set the last shoot time to now.
-		// 6) Set hidden to false (recycle the bullet) and set its x, y to the
-		//    front part of your plane.
-		// Uncomment and fill in the code below.
 		double now = al_get_time();
 		if (key_state[ALLEGRO_KEY_SPACE] && now - last_shoot_timestamp >= MAX_COOLDOWN) {
 		    for (i = 0; i < MAX_BULLET; i++) {
@@ -456,7 +464,7 @@ void game_draw(void) {
 			draw_movable_object(bullets[i]);
 		draw_movable_object(plane);
 		for (i = 0; i < MAX_ENEMY; i++)
-			draw_movable_object(enemies[i]);
+			draw_enemy(enemies[i]);
 	}
 	// #[HACKATHON 3-9]
 	// TODO: If active_scene is SCENE_SETTINGS.
@@ -528,6 +536,7 @@ void game_change_scene(int next_scene) {
 			enemies[i].h = al_get_bitmap_height(start_img_enemy);
 			enemies[i].x = enemies[i].w / 2 + (float)rand() / RAND_MAX * (SCREEN_W - enemies[i].w);
 			enemies[i].y = 80;
+			enemies[i].hp = 3;
 		}
 
 		// #[HACKATHON 2-6]
@@ -573,7 +582,21 @@ void draw_movable_object(MovableObject obj) {
 		return;
 	al_draw_bitmap(obj.img, round(obj.x - obj.w / 2), round(obj.y - obj.h / 2), 0);
 }
+void draw_enemy(Enemy obj) {
+	if (obj.hidden)
+		return;
+	al_draw_bitmap(obj.img, round(obj.x - obj.w / 2), round(obj.y - obj.h / 2), 0);
+}
 
+bool pnt_in_rect(int px, int py, int x, int y, int w, int h){
+	return px >= x && px <= x + w && py >= y && py <= y + h;
+}
+bool object_overlap(float x1, float y1, float w1, float h1, float x2, float y2, float w2, float h2){
+	float l1 = x1 - w1/2, r1 = x1 + w1/2, u1 = y1 - h1/2, d1 = y1 + h1/2;
+	float l2 = x2 - w2/2, r2 = x2 + w2/2, u2 = y2 - h2/2, d2 = y2 + h2/2;
+	if(max(l1, l2) < min(r1, r2) && max(u1, u2) < min(d1, d2)) return 1;
+	else return 0;
+}
 ALLEGRO_BITMAP *load_bitmap_resized(const char *filename, int w, int h) {
 	ALLEGRO_BITMAP* loaded_bmp = al_load_bitmap(filename);
 	if (!loaded_bmp)
