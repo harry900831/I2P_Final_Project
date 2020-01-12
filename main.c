@@ -3,7 +3,7 @@
 
 #define _CRT_SECURE_NO_DEPRECATE
 #include <stdio.h>
-#include <allegro5/allegro.h>
+#include <allegro5/allegro.h>:
 #include <allegro5/allegro_primitives.h>
 #include <allegro5/allegro_image.h>
 #include <allegro5/allegro_font.h>
@@ -33,8 +33,15 @@ const int RESERVE_SAMPLES = 4;
 enum {
 	SCENE_MENU = 1,
 	SCENE_START = 2,
-	SCENE_SETTINGS = 3
+	SCENE_SETTINGS = 3,
+	SCENE_END = 4
 };
+
+#define MOD 10007
+int seed;
+int rand_num(){
+	return seed = (seed * seed % MOD + seed + 7122) % MOD;
+}
 
 /* Input states */
 
@@ -84,18 +91,19 @@ ALLEGRO_SAMPLE_ID start_bgm_id;
 ALLEGRO_BITMAP* img_bullet;
 
 typedef struct {
-	// The center coordinate of the image.
 	float x, y;
-	// The width and height of the object.
 	float w, h;
-	// The velocity in x, y axes.
 	float vx, vy;
-	// Should we draw this object on the screen.
 	bool hidden;
-	// The pointer to the object’s image.
 	ALLEGRO_BITMAP* img;
 } MovableObject;
 void draw_movable_object(MovableObject obj);
+
+#define MAX_PLANE_BULLET 10
+#define MAX_ENEMY_BULLET 20
+MovableObject plane_bullets[MAX_PLANE_BULLET]; 
+MovableObject enemy_bullets[MAX_ENEMY_BULLET];
+
 typedef struct{
 	float x, y;
 	float w, h;
@@ -104,26 +112,26 @@ typedef struct{
 	int hp;
 	ALLEGRO_BITMAP* img;
 } Enemy;
-void draw_enemy(Enemy obj);
-#define MAX_ENEMY 3
-// #[HACKATHON 2-2]
-// TODO: Declare the max bullet count that will show on screen.
-// You can try max 4 bullets here and see if you needed more.
-// Uncomment and fill in the code below.
-#define MAX_BULLET 4
-MovableObject plane;
+#define MAX_ENEMY 5
 Enemy enemies[MAX_ENEMY];
-// #[HACKATHON 2-3]
-// TODO: Declare an array to store bullets with size of max bullet count.
-// Uncomment and fill in the code below.
-MovableObject bullets[MAX_BULLET];
-// #[HACKATHON 2-4]
-// TODO: Set up bullet shooting cool-down variables.
-// 1) Declare your shooting cool-down time as constant. (0.2f will be nice)
-// 2) Declare your last shoot timestamp.
-// Uncomment and fill in the code below.
-const float MAX_COOLDOWN = 0.2f;
-double last_shoot_timestamp;
+void draw_enemy(Enemy obj);
+
+typedef struct{
+	float x, y;
+	float w, h;
+	float vx, vy;
+	bool hidden;
+	int hp;
+	int score;
+	ALLEGRO_BITMAP* img;
+} Plane;
+Plane plane;
+void draw_plane(Plane obj);
+
+const float PLANE_SHOOT_COOLDOWN = 0.2f;
+const float ENEMY_SHOOT_COOLDOWN = 0.3f;
+double last_plane_shoot_timestamp;
+double last_enemy_shoot_timestamp[MAX_ENEMY];
 
 /* Declare function prototypes. */
 
@@ -149,34 +157,23 @@ void game_destroy(void);
 void game_change_scene(int next_scene);
 // Load resized bitmap and check if failed.
 ALLEGRO_BITMAP *load_bitmap_resized(const char *filename, int w, int h);
-// #[HACKATHON 3-2]
-// TODO: Declare a function.
-// Determines whether the point (px, py) is in rect (x, y, w, h).
-// Uncomment the code below.
+
 bool pnt_in_rect(int, int, int, int, int, int);
 bool object_overlap(float, float, float, float, float, float, float, float);
 	
-/* Event callbacks. */
+
 void on_key_down(int keycode);
 void on_mouse_down(int btn, int x, int y);
 
-/* Declare function prototypes for debugging. */
-
-// Display error message and exit the program, used like 'printf'.
-// Write formatted output to stdout and file from the format string.
-// If the program crashes unexpectedly, you can inspect "log.txt" for
-// further information.
 void game_abort(const char* format, ...);
-// Log events for later debugging, used like 'printf'.
-// Write formatted output to stdout and file from the format string.
-// You can inspect "log.txt" for logs in the last run.
+
 void game_log(const char* format, ...);
 // Log using va_list.
 void game_vlog(const char* format, va_list arg);
 
 int main(int argc, char** argv) {
 	// Set random seed for better random outcome.
-	srand(time(NULL));
+	srand(time(NULL)); seed = rand() %MOD;
 	allegro5_init();
 	game_log("Allegro5 initialized");
 	game_log("Game begin");
@@ -295,13 +292,6 @@ void game_init(void) {
 	if (!start_bgm)
 		game_abort("failed to load audio: mythica.ogg");
 
-	// #[HACKATHON 2-5]
-	// TODO: Initialize bullets.
-	// 1) Search for a bullet image online and put it in your project.
-	//    You can use the image we provided.
-	// 2) Load it in by 'al_load_bitmap' or 'load_bitmap_resized'.
-	// 3) If you use 'al_load_bitmap', don't forget to check its return value.
-	// Uncomment and fill in the code below.
 	img_bullet = al_load_bitmap("image12.png");
 	if (!img_bullet)
 		game_abort("failed to load image: image12.png");
@@ -317,7 +307,6 @@ void game_start_event_loop(void) {
 	while (!done) {
 		al_wait_for_event(game_event_queue, &event);
 		if (event.type == ALLEGRO_EVENT_DISPLAY_CLOSE) {
-			// Event for clicking the window close button.
 			game_log("Window close button clicked");
 			done = true;
 		} else if (event.type == ALLEGRO_EVENT_TIMER) {
@@ -380,13 +369,10 @@ void game_update(void) {
 			plane.vx -= 1;
 		if (key_state[ALLEGRO_KEY_RIGHT] || key_state[ALLEGRO_KEY_D])
 			plane.vx += 1;
-		// 0.71 is (1/sqrt(2)).
+		// 0.71 is (1/sqrt(2))
 		plane.y += plane.vy * 4 * (plane.vx ? 0.71f : 1);
 		plane.x += plane.vx * 4 * (plane.vy ? 0.71f : 1);
-		// #[HACKATHON 1-1]
-		// TODO: Limit the plane's collision box inside the frame.
-		//       (x, y axes can be separated.)
-		// Uncomment and fill in the code below.
+
 		if (plane.x - plane.w / 2 < 0)
 			plane.x = plane.w / 2;
 		else if (plane.x + plane.w / 2 > SCREEN_W)
@@ -395,47 +381,79 @@ void game_update(void) {
 			plane.y = plane.h / 2;
 		else if (plane.y + plane.h / 2 > SCREEN_H)
 			plane.y = SCREEN_H - plane.h / 2;
-		// #[HACKATHON 2-7]
-		// TODO: Update bullet coordinates.
-		// 1) For each bullets, if it's not hidden, update x, y
-		// according to vx, vy.
-		// 2) If the bullet is out of the screen, hide it.
-		// Uncomment and fill in the code below.
+
 		int i, j;
-		for (i = 0; i < MAX_BULLET; i++) {
-			if (bullets[i].hidden)continue;
-			bullets[i].x += bullets[i].vx;
-			bullets[i].y += bullets[i].vy;
-			if (bullets[i].y - bullets[i].h / 2 < 0){
-				bullets[i].hidden = true;
+
+		// process enemy bullet
+		for (i = 0; i < MAX_ENEMY_BULLET; i++){
+			if (enemy_bullets[i].hidden) continue;
+			enemy_bullets[i].x += enemy_bullets[i].vx;
+			enemy_bullets[i].y += enemy_bullets[i].vy;
+			if(enemy_bullets[i].y + enemy_bullets[i].h / 2 > SCREEN_H){
+				enemy_bullets[i].hidden = true;
+			}
+			if(object_overlap(plane.x, plane.y, plane.w, plane.h, enemy_bullets[i].x, enemy_bullets[i].y, enemy_bullets[i].w, enemy_bullets[i].h)){
+				enemy_bullets[i].hidden = true;
+				plane.hp--;
+			}
+		}
+
+		// process plane bullet 
+		for (i = 0; i < MAX_PLANE_BULLET; i++) {
+			if (plane_bullets[i].hidden) continue;
+			plane_bullets[i].x += plane_bullets[i].vx;
+			plane_bullets[i].y += plane_bullets[i].vy;
+			if (plane_bullets[i].y - plane_bullets[i].h / 2 < 0){
+				plane_bullets[i].hidden = true;
 				continue;
 			}
 			for(j = 0; j < MAX_ENEMY; j++){
 				if(enemies[j].hidden)continue;
-				if(object_overlap(bullets[i].x, bullets[i].y, bullets[i].w, bullets[i].h, enemies[j].x, enemies[j].y, enemies[j].w, enemies[j].h)){
+				if(object_overlap(plane_bullets[i].x, plane_bullets[i].y, plane_bullets[i].w, plane_bullets[i].h, enemies[j].x, enemies[j].y, enemies[j].w, enemies[j].h)){
 					enemies[j].hp--;
-					bullets[i].hidden = true;
+					plane_bullets[i].hidden = true;
 					if(enemies[j].hp == 0){
-						enemies[j].hidden = true;
+						plane.score += 100;
+						enemies[j].hidden = true;	
 					}
 				}
 			}
-			
 		}
 
+		// plane shoot
 		double now = al_get_time();
-		if (key_state[ALLEGRO_KEY_SPACE] && now - last_shoot_timestamp >= MAX_COOLDOWN) {
-		    for (i = 0; i < MAX_BULLET; i++) {
-		       if (bullets[i].hidden)
+		if (key_state[ALLEGRO_KEY_SPACE] && now - last_plane_shoot_timestamp >= PLANE_SHOOT_COOLDOWN) {
+		    for (i = 0; i < MAX_PLANE_BULLET; i++) {
+		       if (plane_bullets[i].hidden)
 		           break;
-		    }
-		    if (i < MAX_BULLET) {
-		       last_shoot_timestamp = now;
-		       bullets[i].hidden = false;
-		       bullets[i].x = plane.x;
-		       bullets[i].y = plane.y - plane.h / 2;
+		    } 
+		    if (i < MAX_PLANE_BULLET) {
+		       last_plane_shoot_timestamp = now;
+		       plane_bullets[i].hidden = false;
+		       plane_bullets[i].x = plane.x;
+		       plane_bullets[i].y = plane.y - plane.h / 2;
 		    }
 		}
+
+		//enemy shoot
+		for(i = 0; i < MAX_ENEMY; i++){
+			if(enemies[i].hidden) continue;
+			now = al_get_time();
+			if(now - last_enemy_shoot_timestamp[i] >= ENEMY_SHOOT_COOLDOWN){
+				for (j = 0; j < MAX_ENEMY_BULLET; j++) {
+			    	if (enemy_bullets[j].hidden)
+			   			break;
+			    } 
+			    if (j < MAX_ENEMY_BULLET) {
+			    	game_log("shoot");
+			    	enemy_bullets[j].hidden = false;
+			    	enemy_bullets[j].x = enemies[i].x;
+			    	enemy_bullets[j].y = enemies[i].y + enemies[i].h / 2;
+			    	last_enemy_shoot_timestamp[i] = now;
+			    }
+			}
+		}
+		if(plane.hp <= 0) game_change_scene(SCENE_END);
 	}
 }
 
@@ -444,12 +462,7 @@ void game_draw(void) {
 		al_draw_bitmap(main_img_background, 0, 0, 0);
 		al_draw_text(font_pirulen_32, al_map_rgb(255, 255, 255), SCREEN_W / 2, 30, ALLEGRO_ALIGN_CENTER, "Space Shooter");
 		al_draw_text(font_pirulen_24, al_map_rgb(255, 255, 255), 20, SCREEN_H - 50, 0, "Press enter key to start");
-		// #[HACKATHON 3-5]
-		// TODO: Draw settings images.
-		// The settings icon should be located at (x, y, w, h) =
-		// (SCREEN_W - 48, 10, 38, 38).
-		// Change its image according to your mouse position.
-		// Uncomment and fill in the code below.
+		
 		if (pnt_in_rect(mouse_x, mouse_y, SCREEN_W - 48, 10, 38, 38))
 			al_draw_bitmap(img_settings2, SCREEN_W - 48, 10, 0);
 		else
@@ -457,20 +470,22 @@ void game_draw(void) {
 	} else if (active_scene == SCENE_START) {
 		int i;
 		al_draw_bitmap(start_img_background, 0, 0, 0);
-		// #[HACKATHON 2-9]
-		// TODO: Draw all bullets in your bullet array.
-		// Uncomment and fill in the code below.
-		for (i = 0; i < MAX_BULLET; i++)
-			draw_movable_object(bullets[i]);
-		draw_movable_object(plane);
+		draw_plane(plane);
+		for (i = 0; i < MAX_PLANE_BULLET; i++)
+			draw_movable_object(plane_bullets[i]);
 		for (i = 0; i < MAX_ENEMY; i++)
 			draw_enemy(enemies[i]);
+		for (i = 0; i < MAX_ENEMY_BULLET; i++)
+			draw_movable_object(enemy_bullets[i]);
+		al_draw_textf(font_pirulen_24, al_map_rgb(100, 50, 255), 10, SCREEN_H - 50, 0, "SCORE: %d", plane.score);
 	}
-	// #[HACKATHON 3-9]
-	// TODO: If active_scene is SCENE_SETTINGS.
-	// Draw anything you want, or simply clear the display.
 	else if (active_scene == SCENE_SETTINGS) {
 		al_clear_to_color(al_map_rgb(0, 0, 0));
+	} else if(active_scene == SCENE_END){
+		al_clear_to_color(al_map_rgb(0, 0, 0));
+		al_draw_text(font_pirulen_32, al_map_rgb(255, 255, 255), SCREEN_W / 2, SCREEN_H / 2 - 70, ALLEGRO_ALIGN_CENTER, "THE END");
+		al_draw_textf(font_pirulen_32, al_map_rgb(255, 255, 255), SCREEN_W / 2, SCREEN_H / 2 - 20, ALLEGRO_ALIGN_CENTER, "YOUR SCORE: %d", plane.score);
+		al_draw_text(font_pirulen_32, al_map_rgb(255, 255, 255), SCREEN_W / 2, SCREEN_H / 2 + 30, ALLEGRO_ALIGN_CENTER, "PRESS R TO THE MENU");
 	}
 	al_flip_display();
 }
@@ -530,6 +545,8 @@ void game_change_scene(int next_scene) {
 		plane.y = 500;
 		plane.w = al_get_bitmap_width(plane.img);
         plane.h = al_get_bitmap_height(plane.img);
+        plane.score = 0;
+        plane.hp = 1;
 		for (i = 0; i < MAX_ENEMY; i++) {
 			enemies[i].img = start_img_enemy;
 			enemies[i].w = al_get_bitmap_width(start_img_enemy);
@@ -539,19 +556,22 @@ void game_change_scene(int next_scene) {
 			enemies[i].hp = 3;
 		}
 
-		// #[HACKATHON 2-6]
-		// TODO: Initialize bullets.
-		// For each bullets in array, set their w and h to the size of
-		// the image, and set their img to bullet image, hidden to true,
-		// (vx, vy) to (0, -3).
-		// Uncomment and fill in the code below.
-		for (i = 0; i < MAX_BULLET; i++) {
-			bullets[i].w = al_get_bitmap_width(img_bullet);
-			bullets[i].h = al_get_bitmap_height(img_bullet);
-			bullets[i].img = img_bullet;
-			bullets[i].vx = 0;
-			bullets[i].vy = -3;
-			bullets[i].hidden = true;
+		
+		for (i = 0; i < MAX_PLANE_BULLET; i++) {
+			plane_bullets[i].w = al_get_bitmap_width(img_bullet);
+			plane_bullets[i].h = al_get_bitmap_height(img_bullet);
+			plane_bullets[i].img = img_bullet;
+			plane_bullets[i].vx = 0;
+			plane_bullets[i].vy = -3;
+			plane_bullets[i].hidden = true;
+		}
+		for (i = 0; i < MAX_ENEMY_BULLET; i++) {
+			enemy_bullets[i].w = al_get_bitmap_width(img_bullet);
+			enemy_bullets[i].h = al_get_bitmap_height(img_bullet);
+			enemy_bullets[i].img = img_bullet;
+			enemy_bullets[i].vx = 0;
+			enemy_bullets[i].vy = 3;
+			enemy_bullets[i].hidden = true;
 		}
 		if (!al_play_sample(start_bgm, 1, 0.0, 1.0, ALLEGRO_PLAYMODE_LOOP, &start_bgm_id))
 			game_abort("failed to play audio (bgm)");
@@ -562,7 +582,12 @@ void on_key_down(int keycode) {
 	if (active_scene == SCENE_MENU) {
 		if (keycode == ALLEGRO_KEY_ENTER)
 			game_change_scene(SCENE_START);
+	} else if(active_scene == SCENE_END){
+		if(keycode == ALLEGRO_KEY_R){
+			game_change_scene(SCENE_MENU);	
+		}
 	}
+	
 }
 
 void on_mouse_down(int btn, int x, int y) {
@@ -587,7 +612,11 @@ void draw_enemy(Enemy obj) {
 		return;
 	al_draw_bitmap(obj.img, round(obj.x - obj.w / 2), round(obj.y - obj.h / 2), 0);
 }
-
+void draw_plane(Plane obj) {
+	if (obj.hidden)
+		return;
+	al_draw_bitmap(obj.img, round(obj.x - obj.w / 2), round(obj.y - obj.h / 2), 0);
+}
 bool pnt_in_rect(int px, int py, int x, int y, int w, int h){
 	return px >= x && px <= x + w && py >= y && py <= y + h;
 }
@@ -669,3 +698,6 @@ void game_vlog(const char* format, va_list arg) {
 	clear_file = false;
 #endif
 }
+
+
+
