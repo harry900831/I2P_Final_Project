@@ -15,10 +15,12 @@
 // If defined, logs will be shown on console and written to file.
 // If commented out, logs will not be shown nor be saved.
 #define LOG_ENABLED
+
+
 #define max(a, b) (a > b ? a : b)
 #define min(a, b) (a < b ? a : b)
 /* Constants. */
-
+const float PI = acos(-1);
 // Frame rate (frame per second)
 const int FPS = 60;
 // Display (screen) width.
@@ -90,6 +92,7 @@ ALLEGRO_SAMPLE_ID start_bgm_id;
 // Uncomment and fill in the code below.
 ALLEGRO_BITMAP* plane_img_bullet;
 ALLEGRO_BITMAP* enemy_img_bullet;
+ALLEGRO_BITMAP* dead_enemy_img;
 
 typedef struct {
 	float x, y;
@@ -100,8 +103,10 @@ typedef struct {
 } MovableObject;
 void draw_movable_object(MovableObject obj);
 
-#define MAX_PLANE_BULLET 10
+#define MAX_PLANE_BULLET 5
 #define MAX_ENEMY_BULLET 20
+#define MAX_ENEMY 5
+
 MovableObject plane_bullets[MAX_PLANE_BULLET]; 
 MovableObject enemy_bullets[MAX_ENEMY_BULLET];
 
@@ -111,9 +116,9 @@ typedef struct{
 	float vx, vy;
 	bool hidden;
 	int hp;
+	float last_shoot_timestamp;
 	ALLEGRO_BITMAP* img;
 } Enemy;
-#define MAX_ENEMY 5
 Enemy enemies[MAX_ENEMY];
 void draw_enemy(Enemy obj);
 
@@ -124,15 +129,18 @@ typedef struct{
 	bool hidden;
 	int hp;
 	int score;
+	float last_shoot_timestamp;
 	ALLEGRO_BITMAP* img;
 } Plane;
 Plane plane;
-const int plane_init_hp = 5;
 void draw_plane(Plane obj);
 
+const int PLANE_INIT_HP = 5;
+const int ENEMY_INIT_HP = 3;
 const float PLANE_SHOOT_COOLDOWN = 0.2f;
-const float ENEMY_SHOOT_COOLDOWN = 2.0f;
-double last_plane_shoot_timestamp;
+const float PLANE_BULLET_VELOCITY = 5.0f;
+const float ENEMY_BULLET_VELOCITY = 3.0f;
+const float ENEMY_VELOCITY = 2.0f;
 double last_enemy_shoot_timestamp[MAX_ENEMY];
 
 /* Declare function prototypes. */
@@ -162,7 +170,7 @@ ALLEGRO_BITMAP *load_bitmap_resized(const char *filename, int w, int h);
 
 bool pnt_in_rect(int, int, int, int, int, int);
 bool object_overlap(float, float, float, float, float, float, float, float);
-	
+bool movableobject_in_map(MovableObject);
 
 void on_key_down(int keycode);
 void on_mouse_down(int btn, int x, int y);
@@ -302,6 +310,10 @@ void game_init(void) {
 	if (!enemy_img_bullet)
 		game_abort("failed to load image: purple_bullet.png");
 
+	dead_enemy_img = load_bitmap_resized("enemy_dead.png", 400, 200);
+	if (!dead_enemy_img)
+		game_abort("failed to load image: enemy_dead.png");
+
 	// Change to first scene.
 	game_change_scene(SCENE_MENU);
 }
@@ -341,7 +353,7 @@ void game_start_event_loop(void) {
 		} else if (event.type == ALLEGRO_EVENT_MOUSE_AXES) {
 			if (event.mouse.dx != 0 || event.mouse.dy != 0) {
 				// Event for mouse move.
-				game_log("Mouse move to (%d, %d)", event.mouse.x, event.mouse.y);
+				//game_log("Mouse move to (%d, %d)", event.mouse.x, event.mouse.y);
 				mouse_x = event.mouse.x;
 				mouse_y = event.mouse.y;
 			} else if (event.mouse.dz != 0) {
@@ -390,12 +402,35 @@ void game_update(void) {
 
 		int i, j;
 
+		//enemy shoot
+		float now;
+		for(i = 0; i < MAX_ENEMY; i++){
+			if(enemies[i].hidden) continue;
+			now = al_get_time();
+			if(now - last_enemy_shoot_timestamp[i] >= enemies[i].last_shoot_timestamp){
+				for (j = 0; j < MAX_ENEMY_BULLET; j++) {
+			    	if (enemy_bullets[j].hidden)
+			   			break;
+			    } 
+			    if (j < MAX_ENEMY_BULLET) {
+			    	enemy_bullets[j].hidden = false;
+			    	enemy_bullets[j].x = enemies[i].x;
+			    	enemy_bullets[j].y = enemies[i].y;
+			    	float radius = atan2(1.0 * plane.y - enemies[i].y, 1.0 * plane.x - enemies[i].x);
+			    	enemy_bullets[j].vx = ENEMY_BULLET_VELOCITY * cos(radius);
+			    	enemy_bullets[j].vy = ENEMY_BULLET_VELOCITY * sin(radius);
+			    	last_enemy_shoot_timestamp[i] = now;
+			    }
+			}
+		}
+
 		// process enemy bullet
 		for (i = 0; i < MAX_ENEMY_BULLET; i++){
 			if (enemy_bullets[i].hidden) continue;
 			enemy_bullets[i].x += enemy_bullets[i].vx;
 			enemy_bullets[i].y += enemy_bullets[i].vy;
-			if(enemy_bullets[i].y + enemy_bullets[i].h / 2 > SCREEN_H){
+			//game_log("%f %f", enemy_bullets[i].vx, enemy_bullets[i].vy);
+			if(!movableobject_in_map(enemy_bullets[i])){
 				enemy_bullets[i].hidden = true;
 			}
 			if(object_overlap(plane.x, plane.y, plane.w, plane.h, enemy_bullets[i].x, enemy_bullets[i].y, enemy_bullets[i].w, enemy_bullets[i].h)){
@@ -409,7 +444,7 @@ void game_update(void) {
 			if (plane_bullets[i].hidden) continue;
 			plane_bullets[i].x += plane_bullets[i].vx;
 			plane_bullets[i].y += plane_bullets[i].vy;
-			if (plane_bullets[i].y - plane_bullets[i].h / 2 < 0){
+			if (!movableobject_in_map(plane_bullets[i])){
 				plane_bullets[i].hidden = true;
 				continue;
 			}
@@ -426,38 +461,6 @@ void game_update(void) {
 			}
 		}
 
-		// plane shoot
-		double now = al_get_time();
-		if (key_state[ALLEGRO_KEY_SPACE] && now - last_plane_shoot_timestamp >= PLANE_SHOOT_COOLDOWN) {
-		    for (i = 0; i < MAX_PLANE_BULLET; i++) {
-		       if (plane_bullets[i].hidden)
-		           break;
-		    } 
-		    if (i < MAX_PLANE_BULLET) {
-		       last_plane_shoot_timestamp = now;
-		       plane_bullets[i].hidden = false;
-		       plane_bullets[i].x = plane.x;
-		       plane_bullets[i].y = plane.y - plane.h / 2;
-		    }
-		}
-
-		//enemy shoot
-		for(i = 0; i < MAX_ENEMY; i++){
-			if(enemies[i].hidden) continue;
-			now = al_get_time();
-			if(now - last_enemy_shoot_timestamp[i] >= ENEMY_SHOOT_COOLDOWN){
-				for (j = 0; j < MAX_ENEMY_BULLET; j++) {
-			    	if (enemy_bullets[j].hidden)
-			   			break;
-			    } 
-			    if (j < MAX_ENEMY_BULLET) {
-			    	enemy_bullets[j].hidden = false;
-			    	enemy_bullets[j].x = enemies[i].x;
-			    	enemy_bullets[j].y = enemies[i].y + enemies[i].h / 2;
-			    	last_enemy_shoot_timestamp[i] = now;
-			    }
-			}
-		}
 		if(plane.hp <= 0) game_change_scene(SCENE_END);
 	}
 }
@@ -472,6 +475,10 @@ void game_draw(void) {
 			al_draw_bitmap(img_settings, SCREEN_W - 48, 10, 0);
 		else
 			al_draw_bitmap(img_settings2, SCREEN_W - 48, 10, 0);
+
+		al_draw_bitmap(start_img_plane, round(400 - al_get_bitmap_width(start_img_plane) / 2), round(500 - al_get_bitmap_height(start_img_plane) / 2), 0);
+		al_draw_bitmap(dead_enemy_img, round(400 - al_get_bitmap_width(dead_enemy_img) / 2), round(250 - al_get_bitmap_height(dead_enemy_img) / 2), 0);
+		
 	} else if (active_scene == SCENE_START) {
 		int i;
 		al_draw_bitmap(start_img_background, 0, 0, 0);
@@ -482,12 +489,11 @@ void game_draw(void) {
 			draw_enemy(enemies[i]);
 		for (i = 0; i < MAX_ENEMY_BULLET; i++)
 			draw_movable_object(enemy_bullets[i]);
-		al_draw_textf(font_pirulen_24, al_map_rgb(100, 50, 255), 10, SCREEN_H - 50, 0, "SCORE: %d", plane.score);
+		al_draw_textf(font_pirulen_24, al_map_rgb(100, 50, 255), 20, SCREEN_H - 50, 0, "SCORE: %d", plane.score);
 		
 		al_draw_filled_rectangle(SCREEN_W/2 - 100, SCREEN_H - 40, SCREEN_W/2 + 100, SCREEN_H - 30, al_map_rgb(100, 100, 100));
-		al_draw_filled_rectangle(SCREEN_W/2 - 100, SCREEN_H - 40, SCREEN_W/2 - 100 + (200 * plane.hp / plane_init_hp), SCREEN_H - 30, al_map_rgb(255, 0, 0));
+		al_draw_filled_rectangle(SCREEN_W/2 - 100, SCREEN_H - 40, SCREEN_W/2 - 100 + (200 * plane.hp / PLANE_INIT_HP), SCREEN_H - 30, al_map_rgb(255, 0, 0));
 		al_draw_rectangle(SCREEN_W/2 - 100, SCREEN_H - 40, SCREEN_W/2 + 100, SCREEN_H - 30, al_map_rgb(0, 0, 0), 2);
-
 	}
 	else if (active_scene == SCENE_SETTINGS) {
 		al_clear_to_color(al_map_rgb(0, 0, 0));
@@ -496,7 +502,6 @@ void game_draw(void) {
 		al_draw_text(font_pirulen_32, al_map_rgb(255, 255, 255), SCREEN_W / 2, SCREEN_H / 2 - 70, ALLEGRO_ALIGN_CENTER, "THE END");
 		al_draw_textf(font_pirulen_32, al_map_rgb(255, 255, 255), SCREEN_W / 2, SCREEN_H / 2 - 20, ALLEGRO_ALIGN_CENTER, "YOUR SCORE: %d", plane.score);
 		al_draw_text(font_pirulen_32, al_map_rgb(255, 255, 255), SCREEN_W / 2, SCREEN_H / 2 + 30, ALLEGRO_ALIGN_CENTER, "PRESS R TO THE MENU");
-		
 	}
 	al_flip_display();
 }
@@ -528,6 +533,8 @@ void game_destroy(void) {
 	al_destroy_bitmap(plane_img_bullet);
 	al_destroy_bitmap(enemy_img_bullet);
 
+	al_destroy_bitmap(dead_enemy_img);
+
 	al_destroy_timer(game_update_timer);
 	al_destroy_event_queue(game_event_queue);
 	al_destroy_display(game_display);
@@ -558,14 +565,17 @@ void game_change_scene(int next_scene) {
 		plane.w = al_get_bitmap_width(plane.img);
         plane.h = al_get_bitmap_height(plane.img);
         plane.score = 0;
-        plane.hp = plane_init_hp;
+        plane.hp = PLANE_INIT_HP;
+        plane.last_shoot_timestamp = al_get_time();
 		for (i = 0; i < MAX_ENEMY; i++) {
+			last_enemy_shoot_timestamp[i] = al_get_time();
+			enemies[i].last_shoot_timestamp = rand_num()%5 + 1;
 			enemies[i].img = start_img_enemy;
 			enemies[i].w = al_get_bitmap_width(start_img_enemy);
 			enemies[i].h = al_get_bitmap_height(start_img_enemy);
 			enemies[i].x = enemies[i].w / 2 + (float)rand() / RAND_MAX * (SCREEN_W - enemies[i].w);
-			enemies[i].y = 80;
-			enemies[i].hp = 3;
+			enemies[i].y = rand_num() % 200 +50;
+			enemies[i].hp = ENEMY_INIT_HP;
 		}
 		for (i = 0; i < MAX_PLANE_BULLET; i++) {
 			plane_bullets[i].w = al_get_bitmap_width(plane_img_bullet);
@@ -609,13 +619,32 @@ void on_mouse_down(int btn, int x, int y) {
 			if (pnt_in_rect(x, y, SCREEN_W - 48, 10, 38, 38))
 				game_change_scene(SCENE_SETTINGS);
 		}
+	} else if(active_scene == SCENE_START){
+		int i;
+		double now = al_get_time();
+		if (btn == 1 && now - plane.last_shoot_timestamp >= PLANE_SHOOT_COOLDOWN) {
+		    for (i = 0; i < MAX_PLANE_BULLET; i++) {
+		        if (plane_bullets[i].hidden)
+		            break;
+		    } 
+		    if (i < MAX_PLANE_BULLET) {
+		    	plane.last_shoot_timestamp = now;
+		        float radius = atan2(1.0 * mouse_y - plane.y, 1.0 * mouse_x - plane.x);
+		        plane_bullets[i].hidden = false;
+		        plane_bullets[i].x = plane.x;
+		        plane_bullets[i].y = plane.y;
+		        plane_bullets[i].vx = PLANE_BULLET_VELOCITY * cos(radius);
+		        plane_bullets[i].vy = PLANE_BULLET_VELOCITY * sin(radius);
+		    }
+		}
+
 	}
 }
 
 void draw_movable_object(MovableObject obj) {
 	if (obj.hidden)
 		return;
-	al_draw_bitmap(obj.img, round(obj.x - obj.w / 2), round(obj.y - obj.h / 2), 0);
+	al_draw_rotated_bitmap(obj.img, obj.w/2, obj.h/2, obj.x, obj.y, atan2(obj.vy, obj.vx) + PI/2, 0);
 }
 void draw_enemy(Enemy obj) {
 	if (obj.hidden)
@@ -625,7 +654,8 @@ void draw_enemy(Enemy obj) {
 void draw_plane(Plane obj) {
 	if (obj.hidden)
 		return;
-	al_draw_bitmap(obj.img, round(obj.x - obj.w / 2), round(obj.y - obj.h / 2), 0);
+	float radius = atan2(1.0 * mouse_y - obj.y, 1.0 * mouse_x - obj.x) + PI/2;
+	al_draw_rotated_bitmap(obj.img, obj.w/2, obj.h/2, obj.x , obj.y, radius, 0);
 }
 bool pnt_in_rect(int px, int py, int x, int y, int w, int h){
 	return px >= x && px <= x + w && py >= y && py <= y + h;
@@ -635,6 +665,9 @@ bool object_overlap(float x1, float y1, float w1, float h1, float x2, float y2, 
 	float l2 = x2 - w2/2, r2 = x2 + w2/2, u2 = y2 - h2/2, d2 = y2 + h2/2;
 	if(max(l1, l2) < min(r1, r2) && max(u1, u2) < min(d1, d2)) return 1;
 	else return 0;
+}
+bool movableobject_in_map(MovableObject obj){
+	return obj.x >= 0 && obj.x < SCREEN_W && obj.y >= 0 && obj.y < SCREEN_H;
 }
 ALLEGRO_BITMAP *load_bitmap_resized(const char *filename, int w, int h) {
 	ALLEGRO_BITMAP* loaded_bmp = al_load_bitmap(filename);
@@ -657,20 +690,6 @@ ALLEGRO_BITMAP *load_bitmap_resized(const char *filename, int w, int h) {
 
 	return resized_bmp;
 }
-
-// #[HACKATHON 3-3]
-// TODO: Define bool pnt_in_rect(int px, int py, int x, int y, int w, int h)
-// Uncomment and fill in the code below.
-//bool pnt_in_rect(int px, int py, int x, int y, int w, int h) {
-//	return ???;
-//}
-
-
-// +=================================================================+
-// | Code below is for debugging purpose, it's fine to remove it.    |
-// | Deleting the code below and removing all calls to the functions |
-// | doesn't affect the game.                                        |
-// +=================================================================+
 
 void game_abort(const char* format, ...) {
 	va_list arg;
