@@ -272,18 +272,18 @@ void allegro5_init(void) {
 
 void game_init(void) {
 	/* Shared resources*/
-	font_pirulen_32 = al_load_font("pirulen.ttf", 32, 0);
+	font_pirulen_32 = al_load_font("source/pirulen.ttf", 32, 0);
 	if (!font_pirulen_32)
 		game_abort("failed to load font: pirulen.ttf with size 32");
 
-	font_pirulen_24 = al_load_font("pirulen.ttf", 24, 0);
+	font_pirulen_24 = al_load_font("source/pirulen.ttf", 24, 0);
 	if (!font_pirulen_24)
 		game_abort("failed to load font: pirulen.ttf with size 24");
 
 	/* Menu Scene resources*/
-	main_img_background = load_bitmap_resized("menu-bg.jpg", SCREEN_W, SCREEN_H);
+	main_img_background = load_bitmap_resized("source/menu-bg.jpg", SCREEN_W, SCREEN_H);
 
-	main_bgm = al_load_sample("S31-Night Prowler.ogg");
+	main_bgm = al_load_sample("source/S31-Night Prowler.ogg");
 	if (!main_bgm)
 		game_abort("failed to load audio: S31-Night Prowler.ogg");
 
@@ -291,43 +291,43 @@ void game_init(void) {
 	// TODO: Load settings images.
 	// Don't forget to check their return values.
 	// Uncomment and fill in the code below.
-	img_settings1 = al_load_bitmap("settings.png");
+	img_settings1 = al_load_bitmap("source/settings.png");
 	if (!img_settings1)
 		game_abort("failed to load image: settings.png");
-	img_settings2 = al_load_bitmap("settings2.png");
+	img_settings2 = al_load_bitmap("source/settings2.png");
 	if (!img_settings2)
 		game_abort("failed to load image: settings2.png");
-	img_scoreboard1 = al_load_bitmap("scoreboard1.png");
+	img_scoreboard1 = al_load_bitmap("source/scoreboard1.png");
 	if (!img_scoreboard1)
 		game_abort("failed to load image: scoreboard1.png");
-	img_scoreboard2 = al_load_bitmap("scoreboard2.png");
+	img_scoreboard2 = al_load_bitmap("source/scoreboard2.png");
 	if (!img_scoreboard2)
 		game_abort("failed to load image: scoreboard2.png");
 
 	/* Start Scene resources*/
-	start_img_background = load_bitmap_resized("game-bg.jpg", SCREEN_W, SCREEN_H);
+	start_img_background = load_bitmap_resized("source/game-bg.jpg", SCREEN_W, SCREEN_H);
 
-	start_img_plane = load_bitmap_resized("plane.png", 60, 60);
+	start_img_plane = load_bitmap_resized("source/plane.png", 60, 60);
 	if (!start_img_plane)
 		game_abort("failed to load image: plane.png");
 
-	start_img_enemy = load_bitmap_resized("enemy.png", 90, 52);
+	start_img_enemy = load_bitmap_resized("source/enemy.png", 90, 52);
 	if (!start_img_enemy)
 		game_abort("failed to load image: enemy.png");
 
-	start_bgm = al_load_sample("mythica.ogg");
+	start_bgm = al_load_sample("source/mythica.ogg");
 	if (!start_bgm)
 		game_abort("failed to load audio: mythica.ogg");
 
-	plane_img_bullet = load_bitmap_resized("bullet.png", 15, 30);
+	plane_img_bullet = load_bitmap_resized("source/bullet.png", 15, 30);
 	if (!plane_img_bullet)
 		game_abort("failed to load image: bullet.png");
 
-	enemy_img_bullet = load_bitmap_resized("purple_bullet.png", 20, 32);
+	enemy_img_bullet = load_bitmap_resized("source/purple_bullet.png", 20, 32);
 	if (!enemy_img_bullet)
 		game_abort("failed to load image: purple_bullet.png");
 
-	dead_enemy_img = load_bitmap_resized("enemy_dead.png", 400, 200);
+	dead_enemy_img = load_bitmap_resized("source/enemy_dead.png", 400, 200);
 	if (!dead_enemy_img)
 		game_abort("failed to load image: enemy_dead.png");
 
