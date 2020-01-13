@@ -103,7 +103,7 @@ typedef struct {
 } MovableObject;
 void draw_movable_object(MovableObject obj);
 
-#define MAX_PLANE_BULLET 5
+#define MAX_PLANE_BULLET 7
 #define MAX_ENEMY_BULLET 20
 #define MAX_ENEMY 5
 
@@ -117,6 +117,7 @@ typedef struct{
 	bool hidden;
 	int hp;
 	float last_shoot_timestamp;
+	float shoot_cooldown;
 	ALLEGRO_BITMAP* img;
 } Enemy;
 Enemy enemies[MAX_ENEMY];
@@ -130,6 +131,7 @@ typedef struct{
 	int hp;
 	int score;
 	float last_shoot_timestamp;
+	float shoot_cooldown;
 	ALLEGRO_BITMAP* img;
 } Plane;
 Plane plane;
@@ -137,11 +139,9 @@ void draw_plane(Plane obj);
 
 const int PLANE_INIT_HP = 5;
 const int ENEMY_INIT_HP = 3;
-const float PLANE_SHOOT_COOLDOWN = 0.2f;
 const float PLANE_BULLET_VELOCITY = 5.0f;
 const float ENEMY_BULLET_VELOCITY = 3.0f;
 const float ENEMY_VELOCITY = 2.0f;
-double last_enemy_shoot_timestamp[MAX_ENEMY];
 
 /* Declare function prototypes. */
 
@@ -407,7 +407,7 @@ void game_update(void) {
 		for(i = 0; i < MAX_ENEMY; i++){
 			if(enemies[i].hidden) continue;
 			now = al_get_time();
-			if(now - last_enemy_shoot_timestamp[i] >= enemies[i].last_shoot_timestamp){
+			if(now - enemies[i].last_shoot_timestamp >= enemies[i].shoot_cooldown){
 				for (j = 0; j < MAX_ENEMY_BULLET; j++) {
 			    	if (enemy_bullets[j].hidden)
 			   			break;
@@ -419,7 +419,7 @@ void game_update(void) {
 			    	float radius = atan2(1.0 * plane.y - enemies[i].y, 1.0 * plane.x - enemies[i].x);
 			    	enemy_bullets[j].vx = ENEMY_BULLET_VELOCITY * cos(radius);
 			    	enemy_bullets[j].vy = ENEMY_BULLET_VELOCITY * sin(radius);
-			    	last_enemy_shoot_timestamp[i] = now;
+			    	enemies[i].last_shoot_timestamp = now;
 			    }
 			}
 		}
@@ -567,9 +567,10 @@ void game_change_scene(int next_scene) {
         plane.score = 0;
         plane.hp = PLANE_INIT_HP;
         plane.last_shoot_timestamp = al_get_time();
+        plane.shoot_cooldown = 0.2f;
 		for (i = 0; i < MAX_ENEMY; i++) {
-			last_enemy_shoot_timestamp[i] = al_get_time();
-			enemies[i].last_shoot_timestamp = rand_num()%5 + 1;
+			enemies[i].last_shoot_timestamp = al_get_time();
+			enemies[i].shoot_cooldown = rand_num()%5 + 1;
 			enemies[i].img = start_img_enemy;
 			enemies[i].w = al_get_bitmap_width(start_img_enemy);
 			enemies[i].h = al_get_bitmap_height(start_img_enemy);
@@ -622,7 +623,7 @@ void on_mouse_down(int btn, int x, int y) {
 	} else if(active_scene == SCENE_START){
 		int i;
 		double now = al_get_time();
-		if (btn == 1 && now - plane.last_shoot_timestamp >= PLANE_SHOOT_COOLDOWN) {
+		if (btn == 1 && now - plane.last_shoot_timestamp >= plane.shoot_cooldown) {
 		    for (i = 0; i < MAX_PLANE_BULLET; i++) {
 		        if (plane_bullets[i].hidden)
 		            break;
